@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle } from 'react-leaflet';
 import axios from 'axios';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -19,6 +19,8 @@ function App() {
   const [filters, setFilters] = useState({ type: '', status: '', date: '' });
   const [theme, setTheme] = useState('dark');
   const [toast, setToast] = useState(null);
+  const [safeRoute, setSafeRoute] = useState(null);
+  const [showNews, setShowNews] = useState(false);
   const lastEventsRef = useRef([]);
 
   useEffect(() => {
@@ -89,22 +91,82 @@ function App() {
     }
   };
 
-  const simulateReport = async () => {
-    const fakeReport = {
-      text: 'Explosion reported near location',
-      username: 'user123',
-      followerCount: 1000,
-      verified: true,
-      latitude: 32.5 + (Math.random() - 0.5) * 0.1,
-      longitude: 74.5 + (Math.random() - 0.5) * 0.1,
-      timestamp: new Date().toISOString()
-    };
+  const simulateReport = async (count = 5) => {
+    const types = ['explosion', 'drone', 'missile', 'conflict'];
+    const reports = [];
+    for (let i = 0; i < count; i++) {
+      const type = types[Math.floor(Math.random() * types.length)];
+      const textMap = {
+        explosion: 'Multiple explosions heard near border area',
+        drone: 'Unidentified drone sighted over the field',
+        missile: 'Possible missile launch detected',
+        conflict: 'Exchange of fire reported between forces'
+      };
+
+      const statusRoll = Math.random();
+      const followerCount = 200 + Math.floor(Math.random() * 3000);
+      const verified = statusRoll > 0.5;
+
+      reports.push({
+        text: textMap[type],
+        username: 'user' + Math.floor(Math.random() * 10000),
+        followerCount,
+        verified,
+        latitude: 32.5 + (Math.random() - 0.5) * 0.2,
+        longitude: 74.5 + (Math.random() - 0.5) * 0.2,
+        timestamp: new Date().toISOString()
+      });
+    }
     try {
-      await axios.post('http://localhost:5001/api/report', fakeReport);
+      await Promise.all(reports.map(report => axios.post('http://localhost:5001/api/report', report)));
       fetchEvents();
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const simulateCluster = async () => {
+    const baseLat = 32.5;
+    const baseLon = 74.5;
+    const reports = [];
+    for (let i = 0; i < 7; i++) {
+      reports.push({
+        text: 'Cluster event reported',
+        username: 'clusteruser' + i,
+        followerCount: 500 + Math.floor(Math.random() * 500),
+        verified: Math.random() > 0.3,
+        latitude: baseLat + (Math.random() - 0.5) * 0.01,
+        longitude: baseLon + (Math.random() - 0.5) * 0.01,
+        timestamp: new Date().toISOString()
+      });
+    }
+    try {
+      await Promise.all(reports.map(report => axios.post('http://localhost:5001/api/report', report)));
+      fetchEvents();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const computeSafeRoute = () => {
+    const center = [32.5, 74.5];
+    if (events.length === 0) {
+      setSafeRoute({ from: center, to: [center[0] + 0.1, center[1]] });
+      return;
+    }
+
+    const avgLat = events.reduce((sum, e) => sum + e.latitude, 0) / events.length;
+    const avgLon = events.reduce((sum, e) => sum + e.longitude, 0) / events.length;
+
+    const dx = center[0] - avgLat;
+    const dy = center[1] - avgLon;
+    const len = Math.sqrt(dx*dx + dy*dy) || 1;
+
+    const safeDistance = 0.2; // degrees (~20km)
+    const safeLat = center[0] + (dx / len) * safeDistance;
+    const safeLon = center[1] + (dy / len) * safeDistance;
+
+    setSafeRoute({ from: center, to: [safeLat, safeLon] });
   };
 
   const filteredEvents = events.filter(event => {
@@ -134,7 +196,17 @@ function App() {
             </div>
             <div className="toast-body">
               <div>Credibility: {toast.credibility}%</div>
-              <div className="text-muted small">{toast.time}</div>
+              <div className="text-muted small mb-2">{toast.time}</div>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  computeSafeRoute();
+                }}
+                className="text-decoration-none"
+              >
+                View safe route
+              </a>
             </div>
           </div>
         </div>
@@ -166,6 +238,12 @@ function App() {
               </Popup>
             </Marker>
           ))}
+          {safeRoute && (
+            <>
+              <Polyline positions={[safeRoute.from, safeRoute.to]} pathOptions={{ color: 'green', weight: 4 }} />
+              <Circle center={safeRoute.to} radius={2000} pathOptions={{ color: 'green', fillColor: 'green', fillOpacity: 0.3 }} />
+            </>
+          )}
         </MapContainer>
       </div>
         <div className="col-4 p-3 bg-body overflow-auto">
@@ -193,7 +271,13 @@ function App() {
           <label className="form-label">Filter by Date</label>
           <input type="date" className="form-control" onChange={(e) => setFilters({...filters, date: e.target.value})} />
         </div>
-        <button className="btn btn-primary mb-3" onClick={simulateReport}>Simulate Report</button>
+        <div className="d-flex gap-2 mb-3">
+          <button className="btn btn-primary" onClick={() => simulateReport(5)}>Simulate 5 Reports</button>
+          <button className="btn btn-primary" onClick={() => simulateReport(10)}>Simulate 10 Reports</button>
+          <button className="btn btn-warning" onClick={simulateCluster}>Simulate Cluster</button>
+          <button className="btn btn-success" onClick={computeSafeRoute}>Show Safe Route</button>
+          <button className="btn btn-info" onClick={() => setShowNews(true)}>News</button>
+        </div>
         {selectedEvent && (
           <div className="card">
             <div className="card-body">
@@ -215,6 +299,38 @@ function App() {
         </ul>
       </div>
     </div>
+
+    {showNews && (
+      <div className="modal d-block" tabIndex="-1" role="dialog" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="modal-dialog modal-lg" role="document">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h5 className="modal-title">Current Affairs</h5>
+              <button type="button" className="btn-close" aria-label="Close" onClick={() => setShowNews(false)}></button>
+            </div>
+            <div className="modal-body">
+              <h6>Market Prices</h6>
+              <ul>
+                <li>Gold: <strong>₹62,000 / 10g</strong> (approx.)</li>
+                <li>Silver: <strong>₹75,000 / kg</strong> (approx.)</li>
+              </ul>
+              <h6>Recent Event</h6>
+              <p>
+                A recent cross-border attack was reported in the <strong>Region X</strong> area,
+                with military activity escalating along the border. Local authorities have
+                issued advisories for civilians to avoid the area until the situation stabilizes.
+              </p>
+              <p className="text-muted small">
+                Note: This information is for demonstration only and is not real-time data.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setShowNews(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 }

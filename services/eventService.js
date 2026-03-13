@@ -13,10 +13,12 @@ function classifyReport(text) {
   };
   for (const [type, words] of Object.entries(keywords)) {
     if (words.some(word => text.toLowerCase().includes(word))) {
-      return { type, confidence: 0.8 }; // Mock confidence
+      // Randomize confidence so simulated reports vary
+      const confidence = 0.4 + Math.random() * 0.5; // 0.4 - 0.9
+      return { type, confidence };
     }
   }
-  return { type: 'conflict', confidence: 0.5 };
+  return { type: 'conflict', confidence: 0.4 + Math.random() * 0.5 };
 }
 
 // Haversine distance
@@ -43,7 +45,8 @@ function findNearbyEvent(latitude, longitude, timestamp) {
   const tenMinutesAgo = new Date(timestamp.getTime() - 10 * 60 * 1000);
   for (const event of events) {
     const distance = getDistance(latitude, longitude, event.latitude, event.longitude);
-    if (distance <= 10 && event.timestamp >= tenMinutesAgo) {
+    // Merge only when very close (within ~1km) and recent
+    if (distance <= 1 && event.timestamp >= tenMinutesAgo) {
       return event;
     }
   }
@@ -73,8 +76,9 @@ exports.processReport = async (report) => {
     // Create new event
     const credibilityScore = calculateCredibility(classification, followerCount, verified, 1);
     const status = updateStatus(credibilityScore);
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     event = {
-      _id: Date.now().toString(),
+      _id: uniqueId,
       type: classification.type,
       description: text,
       latitude,

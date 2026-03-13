@@ -18,6 +18,7 @@ function App() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [filters, setFilters] = useState({ type: '', status: '', date: '' });
   const [theme, setTheme] = useState('dark');
+  const [toast, setToast] = useState(null);
   const lastEventsRef = useRef([]);
 
   useEffect(() => {
@@ -41,26 +42,36 @@ function App() {
     return event.status === 'High Confidence' || ['drone', 'explosion', 'missile'].includes(event.type);
   };
 
-  const showNotification = (event) => {
-    if (Notification.permission === 'granted') {
-      new Notification('Threat Detected', {
-        body: `${event.type.toUpperCase()}: ${event.description} at (${event.latitude.toFixed(2)}, ${event.longitude.toFixed(2)})`,
-        icon: '/logo-removebg-preview.png'
-      });
-    }
+  const getToastBg = (status) => {
+    if (status === 'High Confidence') return 'bg-danger';
+    if (status === 'Developing') return 'bg-warning text-dark';
+    return 'bg-secondary';
   };
+
+  const showToast = (event) => {
+    setToast({
+      status: event.status,
+      credibility: event.credibilityScore,
+      time: new Date(event.timestamp).toLocaleTimeString(),
+      id: event._id
+    });
+  };
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const fetchEvents = async () => {
     try {
       const res = await axios.get('http://localhost:5001/api/events');
       const newEvents = res.data;
-      // Find new threat events
+      // Find new events
       const previousIds = lastEventsRef.current.map(e => e._id);
       const addedEvents = newEvents.filter(event => !previousIds.includes(event._id));
       addedEvents.forEach(event => {
-        if (isThreat(event)) {
-          showNotification(event);
-        }
+        showToast(event);
       });
       lastEventsRef.current = newEvents;
       setEvents(newEvents);
@@ -84,16 +95,14 @@ function App() {
       username: 'user123',
       followerCount: 1000,
       verified: true,
-      latitude: 40.7128 + (Math.random() - 0.5) * 0.1,
-      longitude: -74.0060 + (Math.random() - 0.5) * 0.1,
+      latitude: 32.5 + (Math.random() - 0.5) * 0.1,
+      longitude: 74.5 + (Math.random() - 0.5) * 0.1,
       timestamp: new Date().toISOString()
     };
     try {
-      const res = await axios.post('http://localhost:5001/api/report', fakeReport);
-      alert('Report submitted: ' + JSON.stringify(res.data));
+      await axios.post('http://localhost:5001/api/report', fakeReport);
       fetchEvents();
     } catch (err) {
-      alert('Error: ' + err.message);
       console.error(err);
     }
   };
@@ -115,9 +124,25 @@ function App() {
           </button>
         </div>
       </nav>
+
+      {toast && (
+        <div className="position-fixed top-0 end-0 p-3" style={{ zIndex: 1100 }}>
+          <div className={`toast show ${getToastBg(toast.status)}`} role="alert" aria-live="assertive" aria-atomic="true">
+            <div className="toast-header">
+              <strong className="me-auto">{toast.status}</strong>
+              <button type="button" className="btn-close" aria-label="Close" onClick={() => setToast(null)}></button>
+            </div>
+            <div className="toast-body">
+              <div>Credibility: {toast.credibility}%</div>
+              <div className="text-muted small">{toast.time}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="container-fluid d-flex" style={{ height: 'calc(100vh - 56px)' }}>
       <div className="col-8 p-0">
-        <MapContainer center={[40.7128, -74.0060]} zoom={10} style={{ height: '100%', width: '100%' }}>
+        <MapContainer center={[32.5, 74.5]} zoom={10} style={{ height: '100%', width: '100%' }}>
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'

@@ -1,0 +1,39 @@
+.app {
+  display: flex;
+  height: 100vh;
+}
+
+.map-container {
+  flex: 2;
+}
+
+.sidebar {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.filters {
+  margin-bottom: 20px;
+}
+
+.filters select, .filters input {
+  margin-right: 10px;
+}
+
+.event-list {
+  list-style: none;
+  padding: 0;
+}
+
+.event-list li {
+  cursor: pointer;
+  padding: 10px;
+  border-bottom: 1px solid #ccc;
+}
+
+.event-details {
+  margin-top: 20px;
+  padding: 10px;
+  border: 1px solid #ccc;
+}
